@@ -48,12 +48,12 @@ final class ResultsFolderServiceTests: XCTestCase {
 
     func testCleanupOfMissingCacheIsANoOp() throws {
         let missing = scratch.appendingPathComponent("missing", isDirectory: true)
-        try ResultsFolderService(cacheDir: missing, now: { now }).cleanup()
+        try ResultsFolderService(cacheDir: missing, now: { self.now }).cleanup()
         XCTAssertFalse(FileManager.default.fileExists(atPath: missing.path))
     }
 
     private func service() -> ResultsFolderService {
-        ResultsFolderService(cacheDir: scratch, now: { now })
+        ResultsFolderService(cacheDir: scratch, now: { self.now })
     }
 
     private func makeFolder(_ name: String, age: TimeInterval) throws -> URL {
