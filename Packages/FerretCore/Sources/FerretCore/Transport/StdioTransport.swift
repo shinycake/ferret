@@ -179,7 +179,7 @@ public final class StdioTransport: FSearchTransport, @unchecked Sendable {
         }
     }
 
-    private func drainStderr(_ fd: Int32) {
+    private func drainStderr(fd: Int32) {
         var buffer = [UInt8](repeating: 0, count: 64 * 1024)
         while true {
             let count = buffer.withUnsafeMutableBytes { raw -> Int in
