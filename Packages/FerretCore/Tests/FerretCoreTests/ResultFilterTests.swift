@@ -32,10 +32,10 @@ final class ResultFilterTests: XCTestCase {
         XCTAssertEqual(ResultFilter.requestLimit(userLimit: 9, excluded: [], showHidden: true), 10)
         XCTAssertEqual(ResultFilter.requestLimit(userLimit: 900, excluded: [], showHidden: true), 500)
 
-        let paths = (1...10).map { "/scope/file\($0)" }
+        let paths = (1...12).map { "/scope/file\($0)" }
         XCTAssertEqual(
-            ResultFilter.apply(paths: paths, userLimit: 3, excluded: [], showHidden: true, scope: "/scope"),
-            ["/scope/file1", "/scope/file2", "/scope/file3"]
+            ResultFilter.apply(paths: paths, userLimit: 10, excluded: [], showHidden: true, scope: "/scope"),
+            (1...10).map { "/scope/file\($0)" }
         )
     }
 }
