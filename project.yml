@@ -61,6 +61,9 @@ targets:
         excludes:
           - Info.plist
           - "*.entitlements"
+      # Same files as FerretCore. The appex does not link the package.
+      - path: Packages/FerretCore/Sources/FerretCore/Finder/URLRoute.swift
+      - path: Packages/FerretCore/Sources/FerretCore/Finder/ScopeResolver.swift
     dependencies:
       - sdk: FinderSync.framework
     settings:

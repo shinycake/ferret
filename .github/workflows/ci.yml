@@ -165,7 +165,9 @@ jobs:
           set -euo pipefail
           APP="build/dd/Build/Products/Release/Ferret.app"
           mkdir -p proof
-          codesign --force --sign - "$APP/Contents/PlugIns/FerretFinderSync.appex"
+          codesign --force --sign - -o runtime \
+            --entitlements FinderSync/FerretFinderSync.entitlements \
+            "$APP/Contents/PlugIns/FerretFinderSync.appex"
           codesign --force --sign - "$APP"
           codesign --verify --verbose=2 "$APP" >proof/smoke-codesign.txt 2>&1
           FERRET_DEMO=1 "$APP/Contents/MacOS/Ferret" --demo-exit >proof/smoke.log 2>&1 &
@@ -189,6 +191,27 @@ jobs:
           echo "exit $status" | tee -a proof/smoke.log
           cat proof/smoke.log
           test "$status" -eq 0
+
+      - name: Record Finder Sync appex
+        run: |
+          set -euo pipefail
+          APP="build/dd/Build/Products/Release/Ferret.app"
+          APPEX="$APP/Contents/PlugIns/FerretFinderSync.appex"
+          mkdir -p proof
+          if ! codesign -d --entitlements :- "$APPEX" >proof/appex-entitlements.txt 2>&1; then
+            codesign -d --entitlements - "$APPEX" >proof/appex-entitlements.txt 2>&1
+          fi
+          grep -q "com.apple.security.app-sandbox" proof/appex-entitlements.txt
+          plutil -p "$APPEX/Contents/Info.plist" | tee proof/appex-plutil.txt
+          point="$(plutil -extract NSExtension.NSExtensionPointIdentifier raw -o - "$APPEX/Contents/Info.plist")"
+          test "$point" = "com.apple.FinderSync"
+          {
+            echo "=== pluginkit -a ==="
+            pluginkit -a "$APPEX" || echo "pluginkit -a failed (best effort, exit $?)"
+            echo "=== pluginkit -m -v -i com.shinycake.ferret.FinderSync ==="
+            pluginkit -m -v -i com.shinycake.ferret.FinderSync || echo "pluginkit -m failed (best effort, exit $?)"
+          } >proof/pluginkit.txt 2>&1 || true
+          echo "pluginkit recorded (best effort; does not fail the build)"
 
       - name: Check bundle acceptance
         run: |
@@ -252,6 +275,10 @@ jobs:
             if [ -f proof/core-tests.xml ]; then
               grep '<testsuite ' proof/core-tests.xml
             fi
+            echo "--- ScopeResolver / URLRoute ---"
+            if [ -f proof/core-tests.log ]; then
+              grep -E "ScopeResolverTests|URLRouteTests" proof/core-tests.log || true
+            fi
             echo '```'
             echo ""
             echo "### fsearch build"
@@ -293,6 +320,33 @@ jobs:
               cat proof/smoke-codesign.txt
             else
               echo "n/a"
+            fi
+            echo '```'
+            echo ""
+            echo "### Finder Sync appex entitlements"
+            echo '```'
+            if [ -f proof/appex-entitlements.txt ]; then
+              cat proof/appex-entitlements.txt
+            else
+              echo "appex-entitlements.txt missing"
+            fi
+            echo '```'
+            echo ""
+            echo "### Finder Sync plutil"
+            echo '```'
+            if [ -f proof/appex-plutil.txt ]; then
+              cat proof/appex-plutil.txt
+            else
+              echo "appex-plutil.txt missing"
+            fi
+            echo '```'
+            echo ""
+            echo "### pluginkit (best effort)"
+            echo '```'
+            if [ -f proof/pluginkit.txt ]; then
+              cat proof/pluginkit.txt
+            else
+              echo "pluginkit.txt missing"
             fi
             echo '```'
             echo ""
