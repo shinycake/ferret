@@ -13,4 +13,11 @@ if AppDelegate.isDemoExit {
     }
 }
 
+if OnboardingSnapshot.isRequested {
+    DispatchQueue.main.asyncAfter(deadline: .now() + 15) {
+        logLine("ferret: demo-snapshot timed out")
+        exit(2)
+    }
+}
+
 app.run()

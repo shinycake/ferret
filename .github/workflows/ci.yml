@@ -213,6 +213,42 @@ jobs:
           } >proof/pluginkit.txt 2>&1 || true
           echo "pluginkit recorded (best effort; does not fail the build)"
 
+      - name: Onboarding snapshot
+        run: |
+          set -euo pipefail
+          APP="build/dd/Build/Products/Release/Ferret.app"
+          mkdir -p proof/snapshots
+          FERRET_DEMO=1 "$APP/Contents/MacOS/Ferret" --demo-snapshot \
+            --screen onboarding \
+            --out "$PWD/proof/snapshots/10-onboarding.png" >proof/onboarding-snapshot.log 2>&1 &
+          pid=$!
+          status=0
+          exited=0
+          for _ in $(seq 1 30); do
+            if ! kill -0 "$pid" 2>/dev/null; then
+              wait "$pid" || status=$?
+              exited=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$exited" -ne 1 ]; then
+            echo "onboarding snapshot timed out" | tee -a proof/onboarding-snapshot.log
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+            exit 1
+          fi
+          echo "exit $status" | tee -a proof/onboarding-snapshot.log
+          cat proof/onboarding-snapshot.log
+          test "$status" -eq 0
+          test -s proof/snapshots/10-onboarding.png
+          python3 -c 'import pathlib; p=pathlib.Path("proof/snapshots/10-onboarding.png"); assert p.read_bytes()[:8]==b"\x89PNG\r\n\x1a\n"'
+          sips -g pixelWidth -g pixelHeight proof/snapshots/10-onboarding.png | tee proof/onboarding-snapshot-size.txt
+          w=$(awk '/pixelWidth/ {print $2}' proof/onboarding-snapshot-size.txt)
+          h=$(awk '/pixelHeight/ {print $2}' proof/onboarding-snapshot-size.txt)
+          test "$w" -gt 200
+          test "$h" -gt 200
+
       - name: Check bundle acceptance
         run: |
           set -euo pipefail
@@ -275,9 +311,9 @@ jobs:
             if [ -f proof/core-tests.xml ]; then
               grep '<testsuite ' proof/core-tests.xml
             fi
-            echo "--- ScopeResolver / URLRoute ---"
+            echo "--- ScopeResolver / URLRoute / Onboarding ---"
             if [ -f proof/core-tests.log ]; then
-              grep -E "ScopeResolverTests|URLRouteTests" proof/core-tests.log || true
+              grep -E "ScopeResolverTests|URLRouteTests|OnboardingModelTests" proof/core-tests.log || true
             fi
             echo '```'
             echo ""
@@ -352,7 +388,17 @@ jobs:
             echo ""
             echo "### snapshots"
             echo '```'
-            echo "n/a"
+            if ls proof/snapshots/*.png >/dev/null 2>&1; then
+              ls -la proof/snapshots
+              if [ -f proof/onboarding-snapshot-size.txt ]; then
+                cat proof/onboarding-snapshot-size.txt
+              fi
+              if [ -f proof/onboarding-snapshot.log ]; then
+                cat proof/onboarding-snapshot.log
+              fi
+            else
+              echo "n/a"
+            fi
             echo '```'
             echo ""
             echo "### perf"
