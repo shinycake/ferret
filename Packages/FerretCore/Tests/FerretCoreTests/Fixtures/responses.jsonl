@@ -1,0 +1,17 @@
+{"ok":true,"id":1}
+{"ok":true,"scheduled":true,"id":3}
+{"ok":false,"error":"indexing (first run scans the whole disk, ~20s)","id":2}
+{"entries":7712345,"dirs":812345,"overlay":120,"removed":3,"event_id":123456789,"index_bytes":281000000,"content_docs":90000,"content_segments":7,"content_bytes":120000000,"content_pending":0,"full_disk_access":true,"owner":true,"ok":true,"id":2}
+{"ok":true,"took_us":1312,"hits":[{"path":"/Users/idan/Developer/fsearch/src/main.rs","kind":"file","size":7421,"mtime":1760023351,"score":412},{"path":"/Applications/Safari.app","kind":"link","size":0,"mtime":1759000000,"score":390}],"id":4}
+{"ok":true,"took_us":5600,"source":"index","candidates":812,"read":120,"complete":true,"indexing":0,"files":[{"path":"/Users/idan/Developer/fsearch/src/walk.rs","matches":[{"line":88,"text":"fn apply_dir(...) {"}]}],"id":6}
+{"ok":false,"error":"bad range >","id":8}
+{"ok":false,"error":"unknown type im","id":9}
+{"ok":false,"error":"unknown kind x","id":10}
+{"ok":false,"error":"bad limit","id":11}
+{"ok":false,"error":"regex parse error: unclosed group","id":12}
+{"ok":false,"error":"bad json: expected value at line 1 column 1","id":null}
+{"ok":true,"id":null}
+{"ok":true,"id":4,"took_us":1,"hits":[],"unknown_field":"ignore-me","ready":true}
+{"ok":true}
+{"ok":true,"took_us":10,"hits":[{"path":"/only/path"},{"path":"/tmp/dir","kind":"dir"},{"path":"/tmp/other","kind":"other","size":1},{"path":"/tmp/file","kind":"file","hidden":true}],"id":20}
+{"ok":false,"error":"","id":null}
