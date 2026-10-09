@@ -249,6 +249,42 @@ jobs:
           test "$w" -gt 200
           test "$h" -gt 200
 
+      - name: Settings snapshot
+        run: |
+          set -euo pipefail
+          APP="build/dd/Build/Products/Release/Ferret.app"
+          mkdir -p proof/snapshots
+          FERRET_DEMO=1 "$APP/Contents/MacOS/Ferret" --demo-snapshot \
+            --screen settings \
+            --out "$PWD/proof/snapshots/11-settings.png" >proof/settings-snapshot.log 2>&1 &
+          pid=$!
+          status=0
+          exited=0
+          for _ in $(seq 1 30); do
+            if ! kill -0 "$pid" 2>/dev/null; then
+              wait "$pid" || status=$?
+              exited=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$exited" -ne 1 ]; then
+            echo "settings snapshot timed out" | tee -a proof/settings-snapshot.log
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+            exit 1
+          fi
+          echo "exit $status" | tee -a proof/settings-snapshot.log
+          cat proof/settings-snapshot.log
+          test "$status" -eq 0
+          test -s proof/snapshots/11-settings.png
+          python3 -c 'import pathlib; p=pathlib.Path("proof/snapshots/11-settings.png"); assert p.read_bytes()[:8]==b"\x89PNG\r\n\x1a\n"'
+          sips -g pixelWidth -g pixelHeight proof/snapshots/11-settings.png | tee proof/settings-snapshot-size.txt
+          w=$(awk '/pixelWidth/ {print $2}' proof/settings-snapshot-size.txt)
+          h=$(awk '/pixelHeight/ {print $2}' proof/settings-snapshot-size.txt)
+          test "$w" -gt 200
+          test "$h" -gt 200
+
       - name: Check bundle acceptance
         run: |
           set -euo pipefail
@@ -313,7 +349,7 @@ jobs:
             fi
             echo "--- ScopeResolver / URLRoute / Onboarding ---"
             if [ -f proof/core-tests.log ]; then
-              grep -E "ScopeResolverTests|URLRouteTests|OnboardingModelTests" proof/core-tests.log || true
+              grep -E "ScopeResolverTests|URLRouteTests|OnboardingModelTests|ResultFilterTests|SettingsTests" proof/core-tests.log || true
             fi
             echo '```'
             echo ""
@@ -395,6 +431,12 @@ jobs:
               fi
               if [ -f proof/onboarding-snapshot.log ]; then
                 cat proof/onboarding-snapshot.log
+              fi
+              if [ -f proof/settings-snapshot-size.txt ]; then
+                cat proof/settings-snapshot-size.txt
+              fi
+              if [ -f proof/settings-snapshot.log ]; then
+                cat proof/settings-snapshot.log
               fi
             else
               echo "n/a"

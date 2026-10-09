@@ -120,12 +120,20 @@ enum OnboardingSnapshot {
     @MainActor
     static func run() -> Never {
         let screen = argument("--screen")
-        guard screen == "onboarding", let out = argument("--out") else {
-            logLine("ferret: demo-snapshot expected --screen onboarding --out <png> (got screen \(screen ?? "nil"))")
+        guard let out = argument("--out") else {
+            logLine("ferret: demo-snapshot needs --screen onboarding|settings --out <png>")
             exit(2)
         }
         let url = URL(fileURLWithPath: out)
-        captureOnboarding(to: url)
+        switch screen {
+        case "onboarding":
+            captureOnboarding(to: url)
+        case "settings":
+            SettingsPresenter.captureSnapshot(to: url)
+        default:
+            logLine("ferret: demo-snapshot unsupported screen \(screen ?? "nil")")
+            exit(2)
+        }
         exit(0)
     }
 
