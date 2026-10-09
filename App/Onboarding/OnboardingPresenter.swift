@@ -117,6 +117,7 @@ enum OnboardingSnapshot {
             && CommandLine.arguments.contains("--demo-snapshot")
     }
 
+    @MainActor
     static func run() -> Never {
         let screen = argument("--screen")
         guard screen == "onboarding", let out = argument("--out") else {
@@ -128,6 +129,7 @@ enum OnboardingSnapshot {
         exit(0)
     }
 
+    @MainActor
     static func captureOnboarding(to url: URL) {
         NSApp.appearance = NSAppearance(named: .darkAqua)
         let model = OnboardingModel.snapshotFixture()
