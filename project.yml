@@ -1,0 +1,88 @@
+name: Ferret
+options:
+  bundleIdPrefix: com.shinycake
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+settings:
+  base:
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    CODE_SIGNING_ALLOWED: NO
+    CODE_SIGNING_REQUIRED: NO
+    ENABLE_HARDENED_RUNTIME: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+packages:
+  FerretCore:
+    path: Packages/FerretCore
+targets:
+  Ferret:
+    type: application
+    platform: macOS
+    sources:
+      - path: App
+        excludes:
+          - Info.plist
+          - "*.entitlements"
+    dependencies:
+      - package: FerretCore
+      - target: FerretFinderSync
+        embed: true
+        codeSign: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.shinycake.ferret
+        PRODUCT_NAME: Ferret
+        INFOPLIST_FILE: App/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: App/Ferret.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks"
+  FerretFinderSync:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: FinderSync
+        excludes:
+          - Info.plist
+          - "*.entitlements"
+    dependencies:
+      - sdk: FinderSync.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.shinycake.ferret.FinderSync
+        PRODUCT_NAME: FerretFinderSync
+        INFOPLIST_FILE: FinderSync/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: FinderSync/FerretFinderSync.entitlements
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks @executable_path/../../../../Frameworks"
+        SKIP_INSTALL: YES
+  AppTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: AppTests
+    dependencies:
+      - target: Ferret
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.shinycake.ferret.AppTests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Ferret.app/Contents/MacOS/Ferret"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+schemes:
+  Ferret:
+    build:
+      targets:
+        Ferret: all
+    run:
+      config: Release
+    test:
+      config: Debug
+      targets:
+        - AppTests
+    archive:
+      config: Release
