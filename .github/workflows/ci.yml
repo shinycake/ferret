@@ -41,6 +41,71 @@ jobs:
           brew install xcodegen
           xcodegen --version
 
+      - name: Read fsearch pin
+        id: pin
+        run: |
+          set -euo pipefail
+          echo "sha=$(sed -n '2p' third_party/fsearch.pin)" >> "$GITHUB_OUTPUT"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Checkout pinned fsearch
+        run: |
+          set -euo pipefail
+          URL=$(sed -n '1p' third_party/fsearch.pin)
+          SHA=$(sed -n '2p' third_party/fsearch.pin)
+          SRC=build/fsearch-src
+          mkdir -p build
+          if [ ! -d "$SRC/.git" ]; then
+            git clone --filter=blob:none "$URL" "$SRC"
+          fi
+          git -C "$SRC" fetch --depth 1 origin "$SHA"
+          git -C "$SRC" checkout --detach "$SHA"
+          test "$(git -C "$SRC" rev-parse HEAD)" = "$SHA"
+          git -C "$SRC" rev-parse --short HEAD
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: build/fsearch-src
+          key: fsearch-${{ steps.pin.outputs.sha }}
+          cache-on-failure: true
+
+      - name: Build fsearch
+        env:
+          CARGO_TERM_COLOR: never
+        run: |
+          set -euo pipefail
+          mkdir -p proof
+          chmod +x scripts/build-fsearch.sh scripts/bundle-fsearch.sh
+          start=$(date +%s)
+          scripts/build-fsearch.sh 2>&1 | tee proof/fsearch-build.log
+          end=$(date +%s)
+          echo $((end - start)) | tee proof/fsearch-build-seconds.txt
+
+      - name: Tampered pin fails the build script
+        run: |
+          set -euo pipefail
+          mkdir -p proof
+          cp third_party/fsearch.pin "$RUNNER_TEMP/fsearch.pin.bak"
+          printf '%s\n%s\n' 'https://github.com/noahdunnagan/fsearch.git' '0000000000000000000000000000000000000000' > third_party/fsearch.pin
+          set +e
+          scripts/build-fsearch.sh >proof/tampered-sha.log 2>&1
+          code=$?
+          set -e
+          mv "$RUNNER_TEMP/fsearch.pin.bak" third_party/fsearch.pin
+          if [ "$code" -eq 0 ]; then
+            echo "tampered SHA was accepted" >&2
+            exit 1
+          fi
+          SHA=$(sed -n '2p' third_party/fsearch.pin)
+          test "$(git -C build/fsearch-src rev-parse HEAD)" = "$SHA"
+          echo "tampered SHA failed with exit ${code}"
+          tail -30 proof/tampered-sha.log
+
       - name: Test FerretCore
         run: |
           set -euo pipefail
@@ -53,6 +118,47 @@ jobs:
           mkdir -p proof
           xcodegen generate
           xcodebuild -project Ferret.xcodeproj -scheme Ferret -configuration Release -destination 'platform=macOS' -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO build 2>&1 | tee proof/xcodebuild.log
+
+      - name: Missing fsearch binary fails the Xcode build
+        run: |
+          set -euo pipefail
+          mkdir -p proof
+          mv build/fsearch/fsearch build/fsearch/fsearch.aside
+          set +e
+          xcodebuild -project Ferret.xcodeproj -scheme Ferret -configuration Release -destination 'platform=macOS' -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO build >proof/missing-binary.log 2>&1
+          code=$?
+          set -e
+          mv build/fsearch/fsearch.aside build/fsearch/fsearch
+          if [ "$code" -eq 0 ]; then
+            echo "xcodebuild succeeded without the fsearch binary" >&2
+            exit 1
+          fi
+          grep -q "run scripts/build-fsearch.sh first" proof/missing-binary.log
+          xcodebuild -project Ferret.xcodeproj -scheme Ferret -configuration Release -destination 'platform=macOS' -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO build >proof/xcodebuild-restore.log 2>&1
+
+      - name: Check bundled fsearch
+        run: |
+          set -euo pipefail
+          APP="build/dd/Build/Products/Release/Ferret.app"
+          BIN="$APP/Contents/MacOS/fsearch"
+          test -x "$BIN"
+          test -f "$APP/Contents/Resources/ThirdPartyLicenses/fsearch-LICENSE.txt"
+          grep -q "Permission is hereby granted" "$APP/Contents/Resources/ThirdPartyLicenses/fsearch-LICENSE.txt"
+          pin=$(sed -n '2p' third_party/fsearch.pin)
+          grep -qx "$pin" "$APP/Contents/Resources/FSearchPin.txt"
+          mkdir -p proof
+          lipo -info "$BIN" | tee proof/lipo.txt
+          grep -q x86_64 proof/lipo.txt
+          grep -q arm64 proof/lipo.txt
+          codesign --force --sign - "$BIN"
+          set +e
+          "$BIN" >proof/fsearch-usage.out 2>proof/fsearch-usage.err
+          code=$?
+          set -e
+          echo "fsearch exit ${code}" | tee proof/fsearch-usage-status.txt
+          test "$code" -eq 0
+          test ! -s proof/fsearch-usage.out
+          diff -u scripts/expected-fsearch-usage.txt proof/fsearch-usage.err
 
       - name: Smoke demo-exit
         run: |
@@ -108,6 +214,9 @@ jobs:
           scripts/package.sh
           unzip -l dist/Ferret-*.zip | tee proof/package-list.txt
           unzip -l dist/Ferret-*.zip | grep -q "Ferret.app/Contents/PlugIns/FerretFinderSync.appex"
+          unzip -l dist/Ferret-*.zip | grep -q "Ferret.app/Contents/MacOS/fsearch"
+          unzip -l dist/Ferret-*.zip | grep -q "Ferret.app/Contents/Resources/ThirdPartyLicenses/fsearch-LICENSE.txt"
+          unzip -l dist/Ferret-*.zip | grep -q "Ferret.app/Contents/Resources/FSearchPin.txt"
 
       - name: Upload app
         if: always()
@@ -136,15 +245,46 @@ jobs:
             echo "### Test counts"
             echo '```'
             if [ -f proof/core-tests.log ]; then
-              grep -E "Test Suite|Executed |error:|failed" proof/core-tests.log | tail -50
+              grep -E "Testing FerretCore|Test run|passed|failed|error:" proof/core-tests.log | tail -30
             else
               echo "core-tests.log missing"
+            fi
+            if [ -f proof/core-tests.xml ]; then
+              grep '<testsuite ' proof/core-tests.xml
+            fi
+            echo '```'
+            echo ""
+            echo "### fsearch build"
+            echo '```'
+            if [ -f proof/fsearch-build-seconds.txt ]; then
+              echo "seconds: $(cat proof/fsearch-build-seconds.txt)"
+            fi
+            if [ -f proof/fsearch-build.log ]; then
+              echo "Compiling lines: $(grep -c 'Compiling ' proof/fsearch-build.log || true)"
+              echo "A later run with zero Compiling lines is a Rust cache hit."
+            else
+              echo "fsearch-build.log missing"
             fi
             echo '```'
             echo ""
             echo "### lipo -info"
             echo '```'
-            echo "n/a (fsearch is not bundled in this revision)"
+            if [ -f proof/lipo.txt ]; then
+              cat proof/lipo.txt
+            else
+              echo "lipo.txt missing"
+            fi
+            echo '```'
+            echo ""
+            echo "### fsearch usage (stderr)"
+            echo '```'
+            if [ -f proof/fsearch-usage.err ]; then
+              cat proof/fsearch-usage.err
+              echo "---"
+              cat proof/fsearch-usage-status.txt
+            else
+              echo "usage missing"
+            fi
             echo '```'
             echo ""
             echo "### codesign"

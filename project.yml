@@ -32,6 +32,18 @@ targets:
       - target: FerretFinderSync
         embed: true
         codeSign: false
+    preBuildScripts:
+      - name: Bundle fsearch
+        path: scripts/bundle-fsearch.sh
+        basedOnDependencyAnalysis: false
+        inputFiles:
+          - $(SRCROOT)/build/fsearch/fsearch
+          - $(SRCROOT)/build/fsearch/fsearch-LICENSE.txt
+          - $(SRCROOT)/third_party/fsearch.pin
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(EXECUTABLE_FOLDER_PATH)/fsearch
+          - $(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/ThirdPartyLicenses/fsearch-LICENSE.txt
+          - $(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/FSearchPin.txt
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.shinycake.ferret

@@ -1,0 +1,9 @@
+usage:
+  fsearch <query...> [--json]   search (starts the daemon if needed)
+  fsearch stdio                 JSON lines on stdin/stdout
+  fsearch serve                 run the daemon in the foreground
+  fsearch status
+  fsearch install [--login]      copy to ~/.local/bin; --login also starts the daemon at login
+                                (needs Full Disk Access granted to ~/.local/bin/fsearch)
+  fsearch uninstall             remove the login agent (keeps the index)
+  fsearch bench <query...>      time a query in-process against the saved index
