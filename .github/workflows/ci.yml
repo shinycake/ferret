@@ -308,6 +308,50 @@ jobs:
             find "$APP" -maxdepth 4 | sort
           } | tee proof/bundle-acceptance.txt
 
+      - name: Test Ferret app
+        run: |
+          set -euo pipefail
+          mkdir -p proof
+          xcodebuild build-for-testing \
+            -project Ferret.xcodeproj \
+            -scheme Ferret \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath build/dd \
+            CODE_SIGNING_ALLOWED=NO \
+            ENABLE_TESTABILITY=YES \
+            2>&1 | tee proof/apptests-build.log
+          APP="build/dd/Build/Products/Debug/Ferret.app"
+          codesign --force --sign - "$APP/Contents/MacOS/fsearch"
+          codesign --force --sign - "$APP/Contents/PlugIns/FerretFinderSync.appex"
+          codesign --force --sign - "$APP"
+          if [ -d build/dd/Build/Products/Debug/AppTests.xctest ]; then
+            codesign --force --sign - build/dd/Build/Products/Debug/AppTests.xctest
+          fi
+          xctestrun=""
+          while IFS= read -r -d '' candidate; do
+            xctestrun=$candidate
+            break
+          done < <(find build/dd/Build/Products -name '*.xctestrun' -maxdepth 2 -print0)
+          test -n "$xctestrun"
+          echo "xctestrun $xctestrun" | tee proof/apptests.log
+          set +e
+          set +o pipefail
+          xcodebuild test-without-building \
+            -xctestrun "$xctestrun" \
+            -destination 'platform=macOS' \
+            -resultBundlePath "$PWD/proof/AppTests.xcresult" \
+            -parallel-testing-enabled NO \
+            2>&1 | tee -a proof/apptests.log
+          code=${PIPESTATUS[0]}
+          set -o pipefail
+          set -e
+          if ! xcrun xcresulttool get test-results summary --path proof/AppTests.xcresult > proof/apptests-summary.json 2>proof/xcresulttool.err; then
+            xcrun xcresulttool get --legacy --format json --path proof/AppTests.xcresult > proof/apptests-summary.json 2>>proof/xcresulttool.err || true
+          fi
+          echo "app tests exit ${code}" | tee -a proof/apptests.log
+          exit "$code"
+
       - name: Package
         run: |
           set -euo pipefail
@@ -425,6 +469,15 @@ jobs:
               cat proof/pluginkit.txt
             else
               echo "pluginkit.txt missing"
+            fi
+            echo '```'
+            echo ""
+            echo "### App tests"
+            echo '```'
+            if [ -f proof/apptests.log ]; then
+              grep -E "MENU_TITLES:|LIVE_MENU_TITLES:|DOCK:|DaemonManager.start|results cleanup|TEST SUCCEEDED|TEST FAILED|failed" proof/apptests.log | tail -80
+            else
+              echo "apptests.log missing"
             fi
             echo '```'
             echo ""
