@@ -268,17 +268,29 @@ final class ClientTests: XCTestCase {
     }
 
     func testStdioTransportDecodesRealClientReplies() async throws {
-        let script = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ferret-stdio-\(UUID().uuidString).pl")
-        let source = """
-        #!/usr/bin/perl
+        let directory = FileManager.default.temporaryDirectory
+        let token = UUID().uuidString
+        let script = directory.appendingPathComponent("ferret-stdio-\(token).sh")
+        let program = directory.appendingPathComponent("ferret-stdio-\(token).pl")
+        let logURL = directory.appendingPathComponent("ferret-stdio-\(token).log")
+        let programSource = """
         use strict;
         use warnings;
         $| = 1;
+        my $log = $ENV{FERRET_STDIO_LOG};
+        sub note {
+            return unless defined $log && length $log;
+            open my $fh, ">>", $log or return;
+            print $fh $_[0], "\\n";
+            close $fh;
+        }
+        note("perl-start");
         while (my $line = <STDIN>) {
             chomp $line;
+            note("line:$line");
             next if $line eq "";
             my ($id) = $line =~ /"id":(\\d+)/;
+            $id = 0 unless defined $id;
             if ($line =~ /"op":"ping"/) {
                 print qq({"ok":true,"id":$id}\\n);
             } elsif ($line =~ /"op":"status"/) {
@@ -291,11 +303,45 @@ final class ClientTests: XCTestCase {
                 print qq({"ok":true,"took_us":5,"hits":[{"path":"/stdio/$q","kind":"file","size":2,"mtime":3,"score":4}],"id":$id}\\n);
             }
         }
+        note("perl-eof");
         """
-        try source.write(to: script, atomically: true, encoding: .utf8)
+        // /usr/bin/perl on macOS 26 is not the Homebrew perl that CI installs.
+        // /bin/sh always exists and execs perl from PATH.
+        let launcher = """
+        #!/bin/sh
+        PERL=""
+        for candidate in /opt/homebrew/bin/perl /usr/local/bin/perl; do
+          if [ -x "$candidate" ]; then
+            PERL=$candidate
+            break
+          fi
+        done
+        if [ -z "$PERL" ]; then
+          PERL=$(command -v perl || true)
+        fi
+        echo "sh-start perl=$PERL argv=$*" >> "$FERRET_STDIO_LOG"
+        if [ -z "$PERL" ]; then
+          echo "perl missing" >> "$FERRET_STDIO_LOG"
+          exit 127
+        fi
+        exec "$PERL" "\(program.path)"
+        """
+        try programSource.write(to: program, atomically: false, encoding: .utf8)
+        try launcher.write(to: script, atomically: false, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
-        defer { try? FileManager.default.removeItem(at: script) }
-        let client = FSearchClient(factory: StdioFactory(binary: script))
+        let written = try String(contentsOf: script, encoding: .utf8)
+        XCTAssertTrue(written.hasPrefix("#!/bin/sh\n"))
+        defer {
+            if let text = try? String(contentsOf: logURL, encoding: .utf8) {
+                print("ClientTests stdio log:\n\(text)")
+            } else {
+                print("ClientTests stdio log missing")
+            }
+            try? FileManager.default.removeItem(at: script)
+            try? FileManager.default.removeItem(at: program)
+            try? FileManager.default.removeItem(at: logURL)
+        }
+        let client = FSearchClient(factory: StdioFactory(binary: script, env: ["FERRET_STDIO_LOG": logURL.path]))
         defer { Task { await client.close() } }
         try await client.ping()
         let status = try await client.status()
@@ -345,8 +391,12 @@ final class ClientTests: XCTestCase {
 
 final class StdioFactory: FSearchTransportFactory, @unchecked Sendable {
     let binary: URL
-    init(binary: URL) { self.binary = binary }
+    let env: [String: String]
+    init(binary: URL, env: [String: String] = [:]) {
+        self.binary = binary
+        self.env = env
+    }
     func makeTransport(lane: FSearchClient.Lane) -> any FSearchTransport {
-        StdioTransport(binary: binary, env: [:])
+        StdioTransport(binary: binary, env: env)
     }
 }
