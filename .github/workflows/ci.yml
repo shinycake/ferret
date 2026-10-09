@@ -112,6 +112,12 @@ jobs:
           mkdir -p proof
           swift test --package-path Packages/FerretCore --parallel --xunit-output "$PWD/proof/core-tests.xml" 2>&1 | tee proof/core-tests.log
 
+      - name: Test FSearchClient
+        run: |
+          set -euo pipefail
+          mkdir -p proof
+          swift test --package-path Packages/FerretCore --filter ClientTests 2>&1 | tee proof/client-tests.log
+
       - name: Generate and build
         run: |
           set -euo pipefail
