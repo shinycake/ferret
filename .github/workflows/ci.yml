@@ -1,0 +1,195 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  build-test:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          candidates=(/Applications/Xcode_26*.app)
+          if [ ${#candidates[@]} -gt 0 ]; then
+            if command -v gsort >/dev/null 2>&1 && gsort -V </dev/null >/dev/null 2>&1; then
+              X=$(printf '%s\n' "${candidates[@]}" | gsort -V | tail -1)
+            elif sort -V </dev/null >/dev/null 2>&1; then
+              X=$(printf '%s\n' "${candidates[@]}" | sort -V | tail -1)
+            else
+              X=$(printf '%s\n' "${candidates[@]}" | sort | tail -1)
+            fi
+            echo "Selecting $X"
+            sudo xcode-select -s "$X"
+          else
+            echo "No Xcode 26 install found; using the default toolchain"
+          fi
+          xcode-select -p
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: |
+          set -euo pipefail
+          export HOMEBREW_NO_AUTO_UPDATE=1
+          brew install xcodegen
+          xcodegen --version
+
+      - name: Test FerretCore
+        run: |
+          set -euo pipefail
+          mkdir -p proof
+          swift test --package-path Packages/FerretCore --parallel --xunit-output "$PWD/proof/core-tests.xml" 2>&1 | tee proof/core-tests.log
+
+      - name: Generate and build
+        run: |
+          set -euo pipefail
+          mkdir -p proof
+          xcodegen generate
+          xcodebuild -project Ferret.xcodeproj -scheme Ferret -configuration Release -destination 'platform=macOS' -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO build 2>&1 | tee proof/xcodebuild.log
+
+      - name: Smoke demo-exit
+        run: |
+          set -euo pipefail
+          APP="build/dd/Build/Products/Release/Ferret.app"
+          mkdir -p proof
+          codesign --force --sign - "$APP/Contents/PlugIns/FerretFinderSync.appex"
+          codesign --force --sign - "$APP"
+          codesign --verify --verbose=2 "$APP" >proof/smoke-codesign.txt 2>&1
+          FERRET_DEMO=1 "$APP/Contents/MacOS/Ferret" --demo-exit >proof/smoke.log 2>&1 &
+          pid=$!
+          status=0
+          exited=0
+          for _ in $(seq 1 45); do
+            if ! kill -0 "$pid" 2>/dev/null; then
+              wait "$pid" || status=$?
+              exited=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$exited" -ne 1 ]; then
+            echo "smoke test timed out after 45s" | tee -a proof/smoke.log
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+            exit 1
+          fi
+          echo "exit $status" | tee -a proof/smoke.log
+          cat proof/smoke.log
+          test "$status" -eq 0
+
+      - name: Check bundle acceptance
+        run: |
+          set -euo pipefail
+          APP="build/dd/Build/Products/Release/Ferret.app"
+          test -d "$APP/Contents/PlugIns/FerretFinderSync.appex"
+          lsui="$(plutil -extract LSUIElement raw -o - "$APP/Contents/Info.plist")"
+          test "$lsui" = "true"
+          scheme="$(plutil -extract CFBundleURLTypes.0.CFBundleURLSchemes.0 raw -o - "$APP/Contents/Info.plist")"
+          test "$scheme" = "ferret"
+          mkdir -p proof
+          {
+            echo "=== plutil -p ==="
+            plutil -p "$APP/Contents/Info.plist"
+            echo "=== find Ferret.app -maxdepth 4 ==="
+            find "$APP" -maxdepth 4 | sort
+          } | tee proof/bundle-acceptance.txt
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          chmod +x scripts/package.sh
+          scripts/package.sh
+          unzip -l dist/Ferret-*.zip | tee proof/package-list.txt
+          unzip -l dist/Ferret-*.zip | grep -q "Ferret.app/Contents/PlugIns/FerretFinderSync.appex"
+
+      - name: Upload app
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ferret-app
+          path: dist/
+          if-no-files-found: warn
+
+      - name: Upload proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: proof
+          path: proof/
+          if-no-files-found: warn
+
+      - name: Job summary
+        if: always()
+        run: |
+          set +e
+          APP="build/dd/Build/Products/Release/Ferret.app"
+          {
+            echo "## Ferret CI"
+            echo ""
+            echo "### Test counts"
+            echo '```'
+            if [ -f proof/core-tests.log ]; then
+              grep -E "Test Suite|Executed |error:|failed" proof/core-tests.log | tail -50
+            else
+              echo "core-tests.log missing"
+            fi
+            echo '```'
+            echo ""
+            echo "### lipo -info"
+            echo '```'
+            echo "n/a (fsearch is not bundled in this revision)"
+            echo '```'
+            echo ""
+            echo "### codesign"
+            echo '```'
+            if [ -f proof/smoke-codesign.txt ]; then
+              cat proof/smoke-codesign.txt
+            else
+              echo "n/a"
+            fi
+            echo '```'
+            echo ""
+            echo "### snapshots"
+            echo '```'
+            echo "n/a"
+            echo '```'
+            echo ""
+            echo "### perf"
+            echo '```'
+            echo "n/a"
+            echo '```'
+            echo ""
+            echo "### plutil -p"
+            echo '```'
+            if [ -d "$APP" ]; then
+              plutil -p "$APP/Contents/Info.plist"
+            else
+              echo "app missing"
+            fi
+            echo '```'
+            echo ""
+            echo "### find Ferret.app -maxdepth 4"
+            echo '```'
+            if [ -d "$APP" ]; then
+              find "$APP" -maxdepth 4 | sort
+            else
+              echo "app missing"
+            fi
+            echo '```'
+            echo ""
+            echo "### smoke"
+            echo '```'
+            if [ -f proof/smoke.log ]; then
+              cat proof/smoke.log
+            else
+              echo "smoke.log missing"
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
