@@ -141,7 +141,8 @@ final class ClientTests: XCTestCase {
         } catch {
             XCTFail("unexpected \(error)")
         }
-        XCTAssertFalse(await client.isLaneConnected(.interactive))
+        let connectedAfterTimeout = await client.isLaneConnected(.interactive)
+        XCTAssertFalse(connectedAfterTimeout)
     }
 
     func testReconnectsOnceAfterThePeerCloses() async throws {
@@ -151,14 +152,16 @@ final class ClientTests: XCTestCase {
         defer { Task { await client.close() } }
         try await client.ping()
         XCTAssertEqual(server.accepted, 1)
-        XCTAssertTrue(await client.isLaneConnected(.interactive))
+        let connectedAfterPing = await client.isLaneConnected(.interactive)
+        XCTAssertTrue(connectedAfterPing)
         server.dropClients()
         let clock = ContinuousClock()
         let deadline = clock.now.advanced(by: .seconds(2))
         while await client.isLaneConnected(.interactive), clock.now < deadline {
             try await Task.sleep(for: .milliseconds(10))
         }
-        XCTAssertFalse(await client.isLaneConnected(.interactive))
+        let connectedAfterDrop = await client.isLaneConnected(.interactive)
+        XCTAssertFalse(connectedAfterDrop)
         try await client.ping()
         XCTAssertEqual(server.accepted, 2)
         print("ClientTests reconnect accepted=\(server.accepted)")
