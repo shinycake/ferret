@@ -9,6 +9,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         logLine("ferret: launched \(FerretVersion.marketing)")
+        if OnboardingSnapshot.isRequested {
+            OnboardingSnapshot.run()
+        }
+        if OnboardingModel.shouldAutoShow() {
+            OnboardingPresenter.showLive()
+        }
         guard AppDelegate.isDemoExit else { return }
         logLine("ferret: demo-exit")
         NSApp.terminate(nil)

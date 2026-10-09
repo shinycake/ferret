@@ -29,6 +29,7 @@ targets:
           - "*.entitlements"
     dependencies:
       - package: FerretCore
+      - sdk: FinderSync.framework
       - target: FerretFinderSync
         embed: true
         codeSign: false
