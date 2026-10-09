@@ -10,10 +10,13 @@ Ferret is a macOS menu-bar helper (`LSUIElement`) that puts [fsearch](https://gi
 
 ```bash
 brew install xcodegen
+scripts/build-fsearch.sh
 xcodegen generate
 xcodebuild -project Ferret.xcodeproj -scheme Ferret -configuration Release \
   -destination 'platform=macOS' -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO build
 ```
+
+`scripts/build-fsearch.sh` clones the commit in `third_party/fsearch.pin` and writes a universal binary to `build/fsearch/fsearch`. The app target copies it into `Contents/MacOS` and fails the build if that binary is missing.
 
 Core tests:
 
