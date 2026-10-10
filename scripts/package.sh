@@ -11,6 +11,10 @@ if [ ! -d "$APP" ]; then
   exit 1
 fi
 
+if [ "${CI:-}" = "true" ] && [ -z "${SKIP_CI_PROOF:-}" ]; then
+  scripts/ci-proof.sh 2>&1 | tee proof/ci-proof.log
+fi
+
 SHA="$(git rev-parse --short HEAD)"
 mkdir -p dist
 ZIP="dist/Ferret-${SHA}.zip"
