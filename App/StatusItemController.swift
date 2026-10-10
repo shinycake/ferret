@@ -97,11 +97,15 @@ final class StatusItemController: NSObject {
         panel.show(scope: nil, query: nil)
     }
 
-    @objc func showSetup(_ sender: Any?) {}
+    @objc func showSetup(_ sender: Any?) { OnboardingPresenter.showLive() }
 
-    @objc func showSettings(_ sender: Any?) {}
+    @objc func showSettings(_ sender: Any?) { SettingsPresenter.showLive() }
 
-    @objc private func reindex(_ sender: Any?) {}
+    @objc private func reindex(_ sender: Any?) {
+        if SettingsPresenter.confirmReindex(SettingsModel.reindexConfirmation) {
+            DaemonBridge.shared?.reindex()
+        }
+    }
 
     @objc private func openLogs(_ sender: Any?) {
         openLogs()

@@ -29,7 +29,7 @@ enum SettingsPresenter {
     }
 
     /// Hook for `DaemonManager.reindex()` once that actor is linked into the app.
-    static func reindexSearchIndex() {}
+    static func reindexSearchIndex() { DaemonBridge.shared?.reindex() }
 
     static func confirmReindex(_ message: String) -> Bool {
         let alert = NSAlert()
@@ -88,7 +88,7 @@ enum SettingsPresenter {
             marketingVersion: FerretVersion.marketing,
             gitSHA: "unavailable",
             fsearchPin: pinSHA(),
-            daemonSummary: "not connected",
+            daemonSummary: DaemonBridge.shared?.modeSummary ?? "not connected",
             fullDiskAccess: FullDiskAccess.isGranted()
         )
     }
