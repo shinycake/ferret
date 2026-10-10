@@ -1,4 +1,5 @@
 import AppKit
+import FerretCore
 
 /// Default shown on Search… until the KeyboardShortcuts recorder lands.
 enum MenuHotkey {
