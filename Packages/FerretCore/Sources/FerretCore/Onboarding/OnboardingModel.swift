@@ -44,7 +44,7 @@ public final class OnboardingModel {
     public static let completedDefaultsKey = "ferret.hasCompletedOnboarding"
     public static let scanningDetail = "Scanning your disk… (first run ~20 s or more)"
     public static let fullDiskDetail = "Turn on Ferret (click + and choose /Applications/Ferret.app if it isn't listed)."
-    public static let extensionDetail = "Enable the Ferret Finder extension, then add its toolbar button in Finder → View → Customize Toolbar…"
+    public static let extensionDetail = "1. Click Turn On (or Open Extensions Settings and tick Ferret under File Providers / Finder extensions). 2. In Finder choose View → Customize Toolbar… and drag the Ferret magnifier into the toolbar. 3. Click it (or press the hotkey with Finder in front) to search the current folder."
     public static let hotkeyFooter = "Press ⌥Space anywhere to search"
     public static let externalDaemonWarningText = "Your fsearch CLI daemon doesn't have Full Disk Access. Grant it to ~/.local/bin/fsearch, or run fsearch uninstall so Ferret can run its own."
 

@@ -30,6 +30,15 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextFieldDelegate, NS
     private let background: NSView
 
     private(set) var isVisible = false
+    /// Docked under a Finder window's toolbar (Finder-style search field) instead of Spotlight-style.
+    private(set) var docked = false
+    private(set) var dockFolder: String?
+    private var dockWidth: CGFloat = FinderDock.panelWidth
+    let scopeControl = NSSegmentedControl(labels: ["This folder", "This Mac"], trackingMode: .selectOne, target: nil, action: nil)
+    let fieldBezel = NSView()
+    let searchIcon = NSImageView()
+    static let dockFieldRow: CGFloat = 40
+    static let dockScopeRow: CGFloat = 28
     private(set) var scope: String?
     var query: String? { field.stringValue.isEmpty ? nil : field.stringValue }
     private(set) var rows: [ResultRow] = []
@@ -178,6 +187,23 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextFieldDelegate, NS
         background.autoresizingMask = [.width, .height]
         content.addSubview(background)
 
+        fieldBezel.wantsLayer = true
+        fieldBezel.layer?.cornerRadius = 7
+        fieldBezel.layer?.borderWidth = 0.5
+        fieldBezel.isHidden = true
+        content.addSubview(fieldBezel)
+        searchIcon.image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)
+        searchIcon.contentTintColor = .secondaryLabelColor
+        searchIcon.isHidden = true
+        content.addSubview(searchIcon)
+        scopeControl.target = self
+        scopeControl.action = #selector(scopeToggled)
+        scopeControl.segmentStyle = .rounded
+        scopeControl.controlSize = .small
+        scopeControl.font = .systemFont(ofSize: 11)
+        scopeControl.selectedSegment = 0
+        scopeControl.isHidden = true
+        content.addSubview(scopeControl)
         field.isBordered = false
         field.drawsBackground = false
         field.focusRingType = .none
@@ -240,6 +266,7 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextFieldDelegate, NS
     }
 
     private func relayout(rowCount: Int, cheat: Bool) {
+        if docked { return relayoutDocked(rowCount: cheat ? 0 : rowCount) }
         let bodyRows = cheat ? 7 : rowCount
         let height = SearchPanel.height(rows: bodyRows)
         var frame = window.frame
@@ -265,9 +292,95 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextFieldDelegate, NS
         footerTiming.frame = NSRect(x: w / 2, y: 3, width: w / 2 - 14, height: 15)
     }
 
+    private func relayoutDocked(rowCount: Int) {
+        let w = dockWidth
+        let rows = min(rowCount, 8)
+        let footer: CGFloat = rows > 0 ? SearchPanel.footerHeight : 0
+        let height = Self.dockFieldRow + Self.dockScopeRow + CGFloat(rows) * SearchPanel.rowHeight + footer
+        var frame = window.frame
+        let top = frame.maxY
+        frame.size = NSSize(width: w, height: height)
+        frame.origin.y = top - height
+        window.setFrame(frame, display: true)
+        let fieldTop = height - 8
+        fieldBezel.frame = NSRect(x: 8, y: fieldTop - 26, width: w - 16, height: 26)
+        searchIcon.frame = NSRect(x: 15, y: fieldTop - 21, width: 15, height: 15)
+        field.frame = NSRect(x: 34, y: fieldTop - 23, width: w - 50, height: 20)
+        scopeControl.frame = NSRect(x: 8, y: height - Self.dockFieldRow - Self.dockScopeRow + 4, width: w - 16, height: 22)
+        let bodyHeight = CGFloat(rows) * SearchPanel.rowHeight
+        scrollView.frame = NSRect(x: 0, y: footer, width: w, height: bodyHeight)
+        scrollView.isHidden = rows == 0
+        cheatSheet.isHidden = true
+        table.tableColumns.first?.width = w - 4
+        hintLabel.frame = NSRect(x: 12, y: footer + bodyHeight - 16, width: w - 24, height: 14)
+        footerStatus.frame = NSRect(x: 10, y: 3, width: w * 0.6, height: 15)
+        footerTiming.frame = NSRect(x: w * 0.6, y: 3, width: w * 0.4 - 10, height: 15)
+        footerStatus.isHidden = footer == 0
+        footerTiming.isHidden = footer == 0
+    }
+
+    /// Finder-docked mode. `topLeft` is in Cocoa screen coordinates (FinderDock.dockOrigin).
+    func showDocked(topLeft: NSPoint, width: CGFloat, folder: String?, query: String? = nil) {
+        setDocked(true)
+        dockWidth = width
+        dockFolder = folder
+        scopeControl.setEnabled(folder != nil, forSegment: 0)
+        scopeControl.selectedSegment = folder != nil ? 0 : 1
+        scope = folder
+        chip.isHidden = true
+        if let query { field.stringValue = query }
+        relayoutDocked(rowCount: rows.count)
+        window.setFrameTopLeftPoint(topLeft)
+        isVisible = true
+        // Non-activating: Finder stays the active app, the panel still takes key for typing.
+        window.orderFrontRegardless()
+        window.makeKey()
+        window.makeFirstResponder(field)
+        field.currentEditor()?.selectAll(nil)
+        coordinator.update(text: field.stringValue, scope: scope)
+    }
+
+    /// Keeps the docked panel glued to the Finder window as it moves or resizes.
+    func followDock(topLeft: NSPoint, width: CGFloat) {
+        guard docked, isVisible else { return }
+        if abs(width - dockWidth) > 0.5 {
+            dockWidth = width
+            relayoutDocked(rowCount: rows.count)
+        }
+        if window.frame.origin.x != topLeft.x || window.frame.maxY != topLeft.y {
+            window.setFrameTopLeftPoint(topLeft)
+        }
+    }
+
+    var scopeIsThisMac: Bool { scopeControl.selectedSegment == 1 }
+
+    @objc func scopeToggled() {
+        scope = scopeControl.selectedSegment == 0 ? dockFolder : nil
+        coordinator.update(text: field.stringValue, scope: scope)
+    }
+
+    func setDocked(_ value: Bool) {
+        docked = value
+        fieldBezel.isHidden = !value
+        searchIcon.isHidden = !value
+        scopeControl.isHidden = !value
+        field.font = value ? .systemFont(ofSize: 13) : .systemFont(ofSize: 22, weight: .light)
+        field.placeholderString = value ? "Search with Ferret" : "Search files and folders"
+        window.hasShadow = true
+        let bg: NSColor = demo ? NSColor(calibratedWhite: 0.17, alpha: 1) : .windowBackgroundColor
+        fieldBezel.layer?.backgroundColor = (demo ? NSColor(calibratedWhite: 0.25, alpha: 1) : NSColor.controlBackgroundColor).cgColor
+        fieldBezel.layer?.borderColor = NSColor.separatorColor.cgColor
+        if value { background.layer?.backgroundColor = bg.cgColor; background.layer?.cornerRadius = 10 }
+        if !value {
+            footerStatus.isHidden = false
+            footerTiming.isHidden = false
+        }
+    }
+
     // MARK: show / hide
 
     func show(scope: String?, query: String? = nil) {
+        if docked { setDocked(false) }
         setScope(scope, search: false)
         if let query { field.stringValue = query }
         present()
@@ -281,7 +394,7 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextFieldDelegate, NS
         window.orderOut(nil)
         let app = previousApp
         previousApp = nil
-        if let app, app != NSRunningApplication.current { app.activate() }
+        if !docked, let app, app != NSRunningApplication.current { app.activate() }
     }
 
     /// Hotkey toggles visibility and keeps the current query and scope.
@@ -289,6 +402,7 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextFieldDelegate, NS
         if isVisible {
             hide()
         } else {
+            if docked { setDocked(false) }
             present()
             coordinator.update(text: field.stringValue, scope: scope)
         }
@@ -366,6 +480,7 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextFieldDelegate, NS
     }
 
     private func showCheatSheet(_ visible: Bool) {
+        if docked { relayoutDocked(rowCount: 0); return }
         cheatSheet.isHidden = !visible
         scrollView.isHidden = visible
         table.reloadData()
@@ -378,7 +493,7 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextFieldDelegate, NS
         cheatSheet.isHidden = true
         scrollView.isHidden = false
         table.reloadData()
-        relayout(rowCount: max(rows.count, 1), cheat: false)
+        relayout(rowCount: docked ? rows.count : max(rows.count, 1), cheat: false)
         if let selectedPath, let index = rows.firstIndex(where: { $0.path == selectedPath }) {
             select(index)
         } else if !rows.isEmpty {
@@ -463,6 +578,11 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextFieldDelegate, NS
             }
             return performReveal()
         case #selector(NSResponder.deleteBackward(_:)):
+            if docked, field.stringValue.isEmpty, scopeControl.selectedSegment == 0 {
+                scopeControl.selectedSegment = 1
+                scopeToggled()
+                return true
+            }
             if field.stringValue.isEmpty, scope != nil {
                 setScope(nil)
                 return true
