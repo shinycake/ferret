@@ -10,7 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     let panel = PanelController()
-    let daemonManager = DaemonManager()
+    private(set) lazy var daemonManager = DaemonBridge(panel: panel)
     private(set) var statusController: StatusItemController?
     private(set) lazy var hotkey = HotkeyService(panel: panel)
 
@@ -34,7 +34,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let status = StatusItemController(panel: panel, health: daemonManager.health)
         statusController = status
         let daemon = daemonManager
-        Task { await daemon.start() }
+        daemon.start()
+        panel.openSettings = { SettingsPresenter.showLive() }
         if OnboardingModel.shouldAutoShow() {
             OnboardingPresenter.showLive()
         }
