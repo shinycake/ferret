@@ -131,6 +131,8 @@ enum OnboardingSnapshot {
             captureOnboarding(to: url)
         case "settings":
             SettingsPresenter.captureSnapshot(to: url)
+        case "menu":
+            MenuSnapshot.capture(to: url)
         case "panel", "cheatsheet":
             PanelSnapshot.capture(to: url, arguments: CommandLine.arguments)
         default:
