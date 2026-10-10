@@ -36,7 +36,7 @@ final class StatusMenuTests: XCTestCase {
         logLine("MENU_TITLES: \(controller.menuDumpLine)")
     }
 
-    func testLiveMenuContainsCommands() async {
+    func testLiveMenuContainsCommands() async throws {
         let deadline = Date().addingTimeInterval(5)
         while ferretAppDelegate.statusController == nil, Date() < deadline {
             try? await Task.sleep(nanoseconds: 50_000_000)
