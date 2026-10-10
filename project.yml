@@ -18,6 +18,9 @@ settings:
 packages:
   FerretCore:
     path: Packages/FerretCore
+  KeyboardShortcuts:
+    url: https://github.com/sindresorhus/KeyboardShortcuts
+    exactVersion: 3.1.0
 targets:
   Ferret:
     type: application
@@ -29,6 +32,7 @@ targets:
           - "*.entitlements"
     dependencies:
       - package: FerretCore
+      - package: KeyboardShortcuts
       - sdk: FinderSync.framework
       - target: FerretFinderSync
         embed: true
