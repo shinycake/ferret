@@ -119,3 +119,35 @@ final class FinderActionsTests: XCTestCase {
         panel.hide()
     }
 }
+
+@MainActor
+final class ShowAllTests: XCTestCase {
+    func testCommandShiftReturnOpensSymlinkFolder() async throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("showall-\(UUID().uuidString.prefix(6))")
+        for entry in FixtureBackend(root: root.path).entries where entry.kind == .file && entry.path.hasPrefix(root.path) {
+            let url = URL(fileURLWithPath: entry.path)
+            try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("x".utf8).write(to: url)
+        }
+        let workspace = RecordingWorkspace()
+        let defaults = UserDefaults(suiteName: "showall.\(UUID().uuidString)")!
+        let panel = PanelController(backend: FixtureBackend(root: root.path), settings: SettingsStore(defaults: defaults), demo: true)
+        let actions = FinderActions(workspace: workspace, pasteboard: NSPasteboard(name: .init("ferret-showall")))
+        actions.resultsService = ResultsFolderService(cacheDir: root.appendingPathComponent("cache"))
+        panel.setActions(actions)
+        panel.show(scope: nil, query: "alpha")
+        let deadline = Date().addingTimeInterval(3)
+        while panel.rows.isEmpty, Date() < deadline { try? await Task.sleep(nanoseconds: 10_000_000) }
+        let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.command, .shift], timestamp: 0, windowNumber: 0, context: nil, characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36)!
+        XCTAssertTrue(panel.handleKey(event))
+        let until = Date().addingTimeInterval(3)
+        while workspace.opened.isEmpty, Date() < until { try? await Task.sleep(nanoseconds: 10_000_000) }
+        let folder = try XCTUnwrap(workspace.opened.first)
+        let names = try fm.contentsOfDirectory(atPath: folder.path)
+        XCTAssertTrue(names.contains("alpha-report.pdf"))
+        XCTAssertTrue(names.contains("_query.txt"))
+        XCTAssertFalse(panel.isVisible)
+        try? fm.removeItem(at: root)
+    }
+}
