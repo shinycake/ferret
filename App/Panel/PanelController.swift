@@ -129,6 +129,9 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextFieldDelegate, NS
             if event.keyCode == 126 { navigationMode = true; select(0); return true }          // ⌘↑
             if event.keyCode == 125 { navigationMode = true; select(rows.count - 1); return true } // ⌘↓
         }
+        if flags == [.command, .shift], isReturn {
+            return performShowAll()
+        }
         if flags == [.shift], event.keyCode == 49 {
             quickLook.toggle()
             return true
@@ -158,6 +161,30 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextFieldDelegate, NS
     func performReveal() -> Bool {
         guard let row = selectedRow else { return true }
         if actions.reveal(row) { hide() }
+        return true
+    }
+
+    /// ⌘⇧Return: a Finder window of symlinks to every result (SPEC §6.5).
+    @discardableResult
+    func performShowAll() -> Bool {
+        let current = rows
+        guard !current.isEmpty else { return true }
+        let query = coordinator.currentQuery
+        let scope = self.scope
+        let truncated: Bool
+        if case .results(let set) = coordinator.state { truncated = set.truncated } else { truncated = false }
+        let backend = coordinator.backend
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            var paths = current.map(\.path)
+            if truncated, case .names(let hits, _)? = try? await backend.search(.init(text: query, scope: scope, limit: 1000)) {
+                paths = hits.map(\.path)
+            }
+            if let url = self.actions.showAll(paths: paths, query: query, scope: scope) {
+                logLine("ferret: show all → \(url.path)")
+                self.hide()
+            }
+        }
         return true
     }
 

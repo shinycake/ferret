@@ -58,6 +58,20 @@ final class FinderActions {
         toast?(Self.copiedMessage)
     }
 
+    var resultsService = ResultsFolderService(cacheDir: FerretPaths.current().cacheDir)
+
+    @discardableResult
+    func showAll(paths: [String], query: String, scope: String?) -> URL? {
+        do {
+            let folder = try resultsService.materialize(paths: paths, query: query, scope: scope)
+            _ = workspace.open(folder)
+            return folder
+        } catch {
+            toast?("Could not create the results folder")
+            return nil
+        }
+    }
+
     private func check(_ row: ResultRow) -> Bool {
         if fileExists(row.path) { return true }
         toast?(Self.missingMessage)
