@@ -27,7 +27,8 @@ enum OnboardingPresenter {
         OnboardingModel(
             isFullDiskAccessGranted: { FullDiskAccess.isGranted() },
             health: {
-                OnboardingModel.Health(phase: .failed("Search engine not connected"), externalWithoutFDA: false)
+                DaemonBridge.shared?.onboardingHealth
+                    ?? OnboardingModel.Health(phase: .failed("Search engine not connected"), externalWithoutFDA: false)
             },
             isExtensionEnabled: { FIFinderSyncController.isExtensionEnabled },
             loginState: { loginState() },
@@ -40,7 +41,7 @@ enum OnboardingPresenter {
     }
 
     /// Hook for `DaemonManager.restart()` once that actor is linked into the app.
-    static func restartSearchDaemon() {}
+    static func restartSearchDaemon() { DaemonBridge.shared?.restart() }
 
     private static func loginState() -> OnboardingModel.Login {
         switch SMAppService.mainApp.status {
