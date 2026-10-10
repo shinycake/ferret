@@ -30,7 +30,9 @@ struct OnboardingView: View {
 
             step(badge: model.extensionBadge, title: "Finder extension", detail: model.extensionDetailLine) {
                 toolbarPicture
-                Button("Enable…", action: model.openExtensionManagement)
+                ExtensionStatusLine()
+                Button("Turn On") { FinderExtensionStatus.enableWithPluginkit(); model.pollOnce() }
+                Button("Open Extensions Settings", action: model.openExtensionManagement)
                 Button("Skip") { model.skip(.finderExtension) }
             }
 
@@ -130,5 +132,23 @@ private extension OnboardingModel {
         case .requiresApproval:
             return "macOS needs approval in Login Items."
         }
+    }
+}
+
+/// Live `pluginkit -m -i` status, re-read every two seconds while onboarding is open.
+struct ExtensionStatusLine: View {
+    @State private var status: ExtensionStatus = (ProcessInfo.processInfo.environment["FERRET_DEMO"] == "1") ? .disabled : .unknown
+
+    var body: some View {
+        Text("Status: \(status.label)")
+            .font(.caption)
+            .foregroundStyle(status == .enabled ? Color.green : Color.orange)
+            .task {
+                guard !(ProcessInfo.processInfo.environment["FERRET_DEMO"] == "1") else { return }
+                while !Task.isCancelled {
+                    status = await Task.detached { FinderExtensionStatus.current() }.value
+                    try? await Task.sleep(for: .seconds(2))
+                }
+            }
     }
 }

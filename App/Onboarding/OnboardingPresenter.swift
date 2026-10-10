@@ -30,7 +30,7 @@ enum OnboardingPresenter {
                 DaemonBridge.shared?.onboardingHealth
                     ?? OnboardingModel.Health(phase: .failed("Search engine not connected"), externalWithoutFDA: false)
             },
-            isExtensionEnabled: { FIFinderSyncController.isExtensionEnabled },
+            isExtensionEnabled: { FinderExtensionStatus.current() == .enabled },
             loginState: { loginState() },
             restartDaemon: restartSearchDaemon,
             applyLaunchAtLogin: { applyLogin($0) },
@@ -133,6 +133,8 @@ enum OnboardingSnapshot {
             SettingsPresenter.captureSnapshot(to: url)
         case "menu":
             MenuSnapshot.capture(to: url)
+        case "dock":
+            DockSnapshot.capture(to: url, arguments: CommandLine.arguments)
         case "panel", "cheatsheet":
             PanelSnapshot.capture(to: url, arguments: CommandLine.arguments)
         default:

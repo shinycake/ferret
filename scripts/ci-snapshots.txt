@@ -11,3 +11,7 @@ onboarding 10-onboarding.png
 settings 11-settings.png
 panel 07-selected-row-3.png --query alpha --select 3
 menu 00-menu-bar.png
+dock 12-dock-empty.png
+dock 13-dock-folder.png --query alpha
+dock 14-dock-this-mac.png --query alpha --scope-mode mac
+dock 15-dock-selected.png --query alpha --select 2

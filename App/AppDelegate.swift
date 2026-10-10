@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) lazy var daemonManager = DaemonBridge(panel: panel)
     private(set) var statusController: StatusItemController?
     private(set) lazy var hotkey = HotkeyService(panel: panel)
+    private(set) lazy var finderDock = FinderDockController(panel: panel)
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -30,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             OnboardingSnapshot.run()
         }
         cleanupResultsFolders()
+        hotkey.finderDock = finderDock
         hotkey.register()
         let status = StatusItemController(panel: panel, health: daemonManager.health)
         statusController = status
@@ -63,6 +65,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             statusController?.showSettings(nil)
         case .onboarding:
             statusController?.showSetup(nil)
+        case .dock(let scope):
+            finderDock.toggle(folder: scope)
         }
     }
 

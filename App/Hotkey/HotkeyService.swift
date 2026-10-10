@@ -24,7 +24,14 @@ final class HotkeyService {
         }
     }
 
+    /// When set, the hotkey docks the panel to Finder while Finder is frontmost.
+    var finderDock: FinderDockController?
+
     func fire() {
+        if let finderDock, FinderDockController.finderIsFrontmost || (panel.isVisible && panel.docked) {
+            finderDock.toggle(folder: nil)
+            return
+        }
         panel.toggle()
     }
 

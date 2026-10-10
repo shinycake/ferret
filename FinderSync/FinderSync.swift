@@ -36,13 +36,16 @@ class FinderSync: FIFinderSync {
         }
     }
 
+    /// Finder calls this when the toolbar button is clicked, before it shows the menu. That call is the
+    /// click: tell Ferret to dock its search field to this window right away (without activating it),
+    /// and hand back an empty menu so nothing pops up. If Finder insists on a menu (some releases
+    /// draw an empty one), the panel is already open and the menu closes on the next keystroke/click.
     private func toolbarMenu() -> NSMenu {
-        let menu = NSMenu(title: "")
-        let controller = FIFinderSyncController.default()
-        menu.addItem(searchItem(title: "Search…", scope: nil))
-        let targeted = controller.targetedURL()
-        menu.addItem(searchItem(title: "Search in \"\(folderName(targeted))\"", scope: targeted?.path))
-        return menu
+        let targeted = FIFinderSyncController.default().targetedURL()
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = false
+        NSWorkspace.shared.open(URLRoute.dock(scope: targeted?.path).url, configuration: config)
+        return NSMenu(title: "")
     }
 
     private func contextMenu() -> NSMenu {

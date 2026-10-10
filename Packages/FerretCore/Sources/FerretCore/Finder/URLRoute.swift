@@ -6,6 +6,8 @@ public enum URLRoute: Equatable {
     case search(query: String?, scope: String?)
     case settings
     case onboarding
+    /// Docked Finder search (toolbar button). `in` is the Finder window's folder.
+    case dock(scope: String?)
 
     public init?(url: URL) {
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
@@ -20,6 +22,9 @@ public enum URLRoute: Equatable {
             self = .settings
         case "onboarding":
             self = .onboarding
+        case "dock":
+            let items = components.queryItems ?? []
+            self = .dock(scope: Self.validatedScope(items.first { $0.name == "in" }?.value))
         case "search":
             let items = components.queryItems ?? []
             let query = Self.truncatedQuery(items.first { $0.name == "q" }?.value)
@@ -51,6 +56,12 @@ public enum URLRoute: Equatable {
             return URL(string: "ferret://settings")!
         case .onboarding:
             return URL(string: "ferret://onboarding")!
+        case let .dock(scope):
+            var components = URLComponents()
+            components.scheme = "ferret"
+            components.host = "dock"
+            if let scope { components.queryItems = [URLQueryItem(name: "in", value: scope)] }
+            return components.url ?? URL(string: "ferret://dock")!
         }
     }
 
