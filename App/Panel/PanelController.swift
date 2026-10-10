@@ -20,6 +20,11 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextFieldDelegate, NS
     let footerStatus = NSTextField(labelWithString: "")
     let footerTiming = NSTextField(labelWithString: "")
     let coordinator: SearchCoordinator
+    var actions: FinderActions
+    let toastLabel = NSTextField(labelWithString: "")
+    var openSettings: (() -> Void)?
+    private var keyMonitor: Any?
+    private var toastWork: DispatchWorkItem?
     private let background: NSView
 
     private(set) var isVisible = false
@@ -38,6 +43,7 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextFieldDelegate, NS
         self.demo = demo
         window = SearchPanel()
         coordinator = SearchCoordinator(backend: backend, settings: settings ?? SettingsStore())
+        actions = FinderActions()
         if demo {
             let solid = NSView()
             solid.wantsLayer = true
@@ -57,6 +63,92 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextFieldDelegate, NS
         super.init()
         buildViews()
         coordinator.onChange = { [weak self] state in self?.apply(state) }
+        actions.toast = { [weak self] in self?.showToast($0) }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, event.window === self.window else { return event }
+            return self.handleKey(event) ? nil : event
+        }
+    }
+
+    func setActions(_ newActions: FinderActions) {
+        actions = newActions
+        actions.toast = { [weak self] in self?.showToast($0) }
+    }
+
+    func showToast(_ text: String) {
+        toastLabel.stringValue = "  \(text)  "
+        toastLabel.sizeToFit()
+        let w = toastLabel.frame.width + 8
+        toastLabel.frame = NSRect(x: (SearchPanel.width - w) / 2, y: SearchPanel.footerHeight + 8, width: w, height: 22)
+        toastLabel.isHidden = false
+        toastWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.toastLabel.isHidden = true }
+        toastWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: work)
+    }
+
+    var toastText: String? { toastLabel.isHidden ? nil : toastLabel.stringValue.trimmingCharacters(in: .whitespaces) }
+
+    // MARK: keys (SPEC §6.3)
+
+    /// ⌘/⇧ combos while the panel is key. Returns true when consumed.
+    func handleKey(_ event: NSEvent) -> Bool {
+        let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        let chars = event.charactersIgnoringModifiers ?? ""
+        let isReturn = event.keyCode == 36 || event.keyCode == 76
+        if flags == [.command], isReturn {
+            return performOpen()
+        }
+        if flags == [.command] {
+            switch chars.lowercased() {
+            case "r":
+                if let row = selectedRow { actions.reveal(row) }
+                return true
+            case "c":
+                if let editor = field.currentEditor(), editor.selectedRange.length > 0 { return false }
+                if let row = selectedRow { actions.copyPath(row) }
+                return true
+            case ",":
+                openSettings?()
+                return true
+            case let digit where digit.count == 1 && ("1"..."9").contains(digit):
+                let index = Int(digit)! - 1
+                if index < rows.count {
+                    select(index)
+                    actions.reveal(rows[index])
+                }
+                return true
+            default:
+                break
+            }
+            if event.keyCode == 126 { navigationMode = true; select(0); return true }          // ⌘↑
+            if event.keyCode == 125 { navigationMode = true; select(rows.count - 1); return true } // ⌘↓
+        }
+        if flags == [.command, .option], chars.lowercased() == "c" || event.keyCode == 8 {
+            actions.copyAll(rows)
+            return true
+        }
+        if flags == [.control] {
+            if chars == "n" || event.keyCode == 45 { moveSelection(by: 1); return true }
+            if chars == "p" || event.keyCode == 35 { moveSelection(by: -1); return true }
+        }
+        return extraKeyHandler?(event) ?? false
+    }
+
+    var extraKeyHandler: ((NSEvent) -> Bool)?
+
+    @discardableResult
+    func performReveal() -> Bool {
+        guard let row = selectedRow else { return true }
+        if actions.reveal(row) { hide() }
+        return true
+    }
+
+    @discardableResult
+    func performOpen() -> Bool {
+        guard let row = selectedRow else { return true }
+        if actions.open(row) { hide() }
+        return true
     }
 
     // MARK: building
@@ -118,6 +210,14 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextFieldDelegate, NS
         }
         footerTiming.alignment = .right
         footerStatus.stringValue = "Starting…"
+        toastLabel.isHidden = true
+        toastLabel.wantsLayer = true
+        toastLabel.drawsBackground = true
+        toastLabel.backgroundColor = NSColor.black.withAlphaComponent(0.75)
+        toastLabel.textColor = .white
+        toastLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        toastLabel.alignment = .center
+        content.addSubview(toastLabel)
         window.contentView = content
         relayout(rowCount: 0, cheat: true)
     }
@@ -336,6 +436,11 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextFieldDelegate, NS
             navigationMode = true
             select(rows.count - 1)
             return true
+        case #selector(NSResponder.insertNewline(_:)):
+            if NSApp.currentEvent?.modifierFlags.contains(.command) == true {
+                return performOpen()
+            }
+            return performReveal()
         case #selector(NSResponder.deleteBackward(_:)):
             if field.stringValue.isEmpty, scope != nil {
                 setScope(nil)
@@ -364,7 +469,7 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextFieldDelegate, NS
         let row = table.clickedRow
         guard row >= 0, row < rows.count else { return }
         select(row)
-        onDoubleClick?(rows[row])
+        if let onDoubleClick { onDoubleClick(rows[row]) } else { performReveal() }
     }
 
     // MARK: NSWindowDelegate
