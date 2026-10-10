@@ -1,5 +1,6 @@
 import AppKit
 import FerretCore
+import Quartz
 
 /// Backend used until the daemon is connected.
 struct DisconnectedBackend: SearchBackend {
@@ -21,6 +22,7 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextFieldDelegate, NS
     let footerTiming = NSTextField(labelWithString: "")
     let coordinator: SearchCoordinator
     var actions: FinderActions
+    private(set) var quickLook: QuickLookController!
     let toastLabel = NSTextField(labelWithString: "")
     var openSettings: (() -> Void)?
     private var keyMonitor: Any?
@@ -64,6 +66,9 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextFieldDelegate, NS
         buildViews()
         coordinator.onChange = { [weak self] state in self?.apply(state) }
         actions.toast = { [weak self] in self?.showToast($0) }
+        quickLook = QuickLookController(panel: self)
+        // Responder chain: field → … → content view → window → QuickLookController.
+        window.nextResponder = quickLook
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, event.window === self.window else { return event }
             return self.handleKey(event) ? nil : event
@@ -123,6 +128,18 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextFieldDelegate, NS
             }
             if event.keyCode == 126 { navigationMode = true; select(0); return true }          // ⌘↑
             if event.keyCode == 125 { navigationMode = true; select(rows.count - 1); return true } // ⌘↓
+        }
+        if flags == [.shift], event.keyCode == 49 {
+            quickLook.toggle()
+            return true
+        }
+        if flags == [.command], chars.lowercased() == "y" {
+            quickLook.toggle()
+            return true
+        }
+        if flags.isEmpty, event.keyCode == 49, navigationMode, selectedRow != nil {
+            quickLook.toggle()
+            return true
         }
         if flags == [.command, .option], chars.lowercased() == "c" || event.keyCode == 8 {
             actions.copyAll(rows)
@@ -260,6 +277,7 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextFieldDelegate, NS
     func hide() {
         guard isVisible else { return }
         isVisible = false
+        quickLook?.close()
         window.orderOut(nil)
         let app = previousApp
         previousApp = nil
@@ -389,7 +407,10 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextFieldDelegate, NS
 
     /// Hook for Quick Look to follow the selection.
     var onSelectionChange: (() -> Void)?
-    private func selectionDidChange() { onSelectionChange?() }
+    private func selectionDidChange() {
+        quickLook?.selectionChanged()
+        onSelectionChange?()
+    }
 
     func moveSelection(by delta: Int, wrap: Bool = true) {
         guard !rows.isEmpty else { return }
@@ -448,7 +469,9 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextFieldDelegate, NS
             }
             return false
         case #selector(NSResponder.cancelOperation(_:)):
-            if !field.stringValue.isEmpty {
+            if quickLook?.isVisible == true {
+                quickLook.close()
+            } else if !field.stringValue.isEmpty {
                 field.stringValue = ""
                 navigationMode = false
                 coordinator.update(text: "", scope: scope)
@@ -476,8 +499,15 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextFieldDelegate, NS
 
     func windowDidResignKey(_ notification: Notification) {
         guard isVisible, !demo else { return }
-        if keepOpenOnResign?() == true { return }
-        hide()
+        if shouldHideOnResign(newKey: NSApp.keyWindow) { hide() }
+    }
+
+    /// Quick Look taking key is the one exception to hide-on-resign.
+    func shouldHideOnResign(newKey: NSWindow?) -> Bool {
+        if keepOpenOnResign?() == true { return false }
+        if let newKey, newKey is QLPreviewPanel { return false }
+        if QLPreviewPanel.sharedPreviewPanelExists(), QLPreviewPanel.shared().isVisible { return false }
+        return true
     }
 
     // MARK: table
