@@ -1,8 +1,9 @@
 import AppKit
 
-let delegate = AppDelegate()
+let ferretAppDelegate = MainActor.assumeIsolated { AppDelegate() }
 let app = NSApplication.shared
-app.delegate = delegate
+MainActor.assumeIsolated { app.delegate = ferretAppDelegate }
+app.setActivationPolicy(.accessory)
 
 if AppDelegate.isDemoExit {
     // CI has a window server, but didFinishLaunching is not guaranteed to run
