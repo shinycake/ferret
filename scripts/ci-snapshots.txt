@@ -1,1 +1,11 @@
-# screen file
+# screen file [extra args...]   (run by scripts/ci-proof.sh)
+cheatsheet 01-cheatsheet.png
+panel 02-fuzzy.png --query "alpha rep"
+panel 03-typo.png --query mian.rs
+panel 04-filters.png --query "type:doc size:>1kb"
+panel 05-content.png --query grep:apply_dir
+panel 06-scope-chip.png --scope "Developer/ferret/sub dir" --query alpha
+panel 08-indexing.png --state indexing --query alpha
+panel 09-error-hint.png --query "size:>"
+onboarding 10-onboarding.png
+settings 11-settings.png
