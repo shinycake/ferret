@@ -1,8 +1,8 @@
 import AppKit
 
-let ferretAppDelegate = AppDelegate()
+let ferretAppDelegate = MainActor.assumeIsolated { AppDelegate() }
 let app = NSApplication.shared
-app.delegate = ferretAppDelegate
+MainActor.assumeIsolated { app.delegate = ferretAppDelegate }
 app.setActivationPolicy(.accessory)
 
 if AppDelegate.isDemoExit {

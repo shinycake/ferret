@@ -4,7 +4,7 @@ import FerretCore
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    static var isDemoExit: Bool {
+    nonisolated static var isDemoExit: Bool {
         ProcessInfo.processInfo.environment["FERRET_DEMO"] == "1"
             && CommandLine.arguments.contains("--demo-exit")
     }
