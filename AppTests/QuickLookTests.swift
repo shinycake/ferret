@@ -31,6 +31,11 @@ final class QuickLookTests: XCTestCase {
         return panel
     }
 
+    private func waitFor(_ condition: () -> Bool) async {
+        let deadline = Date().addingTimeInterval(4)
+        while !condition(), Date() < deadline { try? await Task.sleep(nanoseconds: 50_000_000) }
+    }
+
     private func spin(_ seconds: TimeInterval = 0.5) async {
         try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
     }
@@ -63,10 +68,10 @@ final class QuickLookTests: XCTestCase {
         _ = panel.handle(command: #selector(NSResponder.moveDown(_:)))
         XCTAssertTrue(panel.navigationMode)
         XCTAssertTrue(panel.handleKey(key(" ", code: 49)))
-        await spin()
+        await waitFor { panel.quickLook.isVisible }
         XCTAssertTrue(panel.quickLook.isVisible)
         XCTAssertTrue(panel.handleKey(key("y", code: 16, flags: .command)))
-        await spin()
+        await waitFor { !panel.quickLook.isVisible }
         XCTAssertFalse(panel.quickLook.isVisible)
         panel.hide()
     }
