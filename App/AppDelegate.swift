@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let panel = PanelController()
     let daemonManager = DaemonManager()
     private(set) var statusController: StatusItemController?
+    private(set) lazy var hotkey = HotkeyService(panel: panel)
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -29,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             OnboardingSnapshot.run()
         }
         cleanupResultsFolders()
+        hotkey.register()
         let status = StatusItemController(panel: panel, health: daemonManager.health)
         statusController = status
         let daemon = daemonManager

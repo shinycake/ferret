@@ -15,10 +15,7 @@ struct SettingsView: View {
             Text("Settings")
                 .font(.title3.weight(.semibold))
 
-            labeled("Search hotkey") {
-                Text("⌥Space")
-                    .font(.body.monospaced())
-            }
+            HotkeyService.recorder()
 
             labeled("Result limit") {
                 Stepper(value: $store.resultLimit, in: 10...500) {
