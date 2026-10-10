@@ -79,3 +79,68 @@ enum PanelSnapshot {
         SnapshotCapture.capture(window: controller.window, to: url)
     }
 }
+
+/// `--screen menu`: renders the live status item's real NSMenuItems into one of our own windows.
+/// (The system-drawn menu itself cannot be captured with cacheDisplay.)
+enum MenuSnapshot {
+    @MainActor
+    static func capture(to url: URL) {
+        NSApp.appearance = NSAppearance(named: .darkAqua)
+        var continuation: AsyncStream<ShellHealth>.Continuation!
+        let stream = AsyncStream<ShellHealth> { continuation = $0 }
+        let controller = StatusItemController(panel: PanelController(demo: true), health: stream, openLogs: {})
+        continuation.yield(.ready("7.7M items · FDA ✓"))
+        SnapshotCapture.spin(0.3)
+        logLine("MENU_TITLES: \(controller.menuDumpLine)")
+
+        let width: CGFloat = 300
+        let rowHeight: CGFloat = 24
+        let items = controller.menu.items
+        let height = CGFloat(items.count) * rowHeight + 52
+        let window = NSWindow(contentRect: NSRect(x: 200, y: 200, width: width, height: height), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: .darkAqua)
+        let content = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
+        content.wantsLayer = true
+        content.layer?.backgroundColor = NSColor(calibratedWhite: 0.16, alpha: 1).cgColor
+        let bar = NSView(frame: NSRect(x: 0, y: height - 28, width: width, height: 28))
+        bar.wantsLayer = true
+        bar.layer?.backgroundColor = NSColor(calibratedWhite: 0.08, alpha: 1).cgColor
+        let icon = NSImageView(frame: NSRect(x: 12, y: 5, width: 18, height: 18))
+        icon.image = controller.statusItem.button?.image
+        icon.contentTintColor = .white
+        bar.addSubview(icon)
+        let barLabel = NSTextField(labelWithString: "Ferret menu-bar item")
+        barLabel.frame = NSRect(x: 36, y: 5, width: 240, height: 17)
+        barLabel.textColor = .secondaryLabelColor
+        barLabel.font = .systemFont(ofSize: 12)
+        bar.addSubview(barLabel)
+        content.addSubview(bar)
+        var y = height - 28 - 12 - rowHeight
+        for item in items {
+            if item.isSeparatorItem {
+                let line = NSBox(frame: NSRect(x: 10, y: y + rowHeight / 2, width: width - 20, height: 1))
+                line.boxType = .separator
+                content.addSubview(line)
+            } else {
+                let title = NSTextField(labelWithString: item.title)
+                title.frame = NSRect(x: 18, y: y + 3, width: 190, height: 18)
+                title.font = .menuFont(ofSize: 13)
+                title.textColor = item.isEnabled && item.action != nil ? .labelColor : .secondaryLabelColor
+                content.addSubview(title)
+                var key = ""
+                if item === controller.searchItem { key = MenuHotkey.display }
+                else if !item.keyEquivalent.isEmpty { key = "⌘" + item.keyEquivalent.uppercased() }
+                let keyLabel = NSTextField(labelWithString: key)
+                keyLabel.frame = NSRect(x: width - 100, y: y + 3, width: 82, height: 18)
+                keyLabel.alignment = .right
+                keyLabel.textColor = .secondaryLabelColor
+                keyLabel.font = .menuFont(ofSize: 13)
+                content.addSubview(keyLabel)
+            }
+            y -= rowHeight
+        }
+        window.contentView = content
+        window.orderFrontRegardless()
+        SnapshotCapture.capture(window: window, to: url)
+    }
+}

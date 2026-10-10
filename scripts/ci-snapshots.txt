@@ -10,3 +10,4 @@ panel 09-error-hint.png --query "size:>"
 onboarding 10-onboarding.png
 settings 11-settings.png
 panel 07-selected-row-3.png --query alpha --select 3
+menu 00-menu-bar.png
