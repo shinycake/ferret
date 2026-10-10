@@ -49,9 +49,10 @@ final class FakeFSearchServer: @unchecked Sendable {
         return recordedResponseIDs
     }
 
-    init() throws {
+    init(path fixedPath: String? = nil) throws {
         let suffix = UUID().uuidString.prefix(8)
-        path = "/tmp/fc-\(getpid())-\(suffix).sock"
+        path = fixedPath ?? "/tmp/fc-\(getpid())-\(suffix).sock"
+        if fixedPath != nil { unlink(path) }
         let address = try UnixSocketAddress.make(path)
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { throw FakeServerError("socket errno \(errno)") }
