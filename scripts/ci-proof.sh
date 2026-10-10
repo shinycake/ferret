@@ -6,26 +6,28 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 mkdir -p proof/snapshots
 
-snap() { # snap <screen> <file>
+snap() { # snap <screen> <file> [extra args...]
   local screen=$1 out="$PWD/proof/snapshots/$2"
+  shift 2
   local APP="build/dd/Build/Products/Release/Ferret.app"
-  FERRET_DEMO=1 "$APP/Contents/MacOS/Ferret" --demo-snapshot --screen "$screen" --out "$out" >"proof/snap-$screen.log" 2>&1 &
+  FERRET_DEMO=1 "$APP/Contents/MacOS/Ferret" --demo-snapshot --screen "$screen" --out "$out" "$@" </dev/null >"proof/snap-$(basename "$out").log" 2>&1 &
   local pid=$! status=0
   for _ in $(seq 1 30); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
-  if kill -0 "$pid" 2>/dev/null; then kill "$pid"; echo "snapshot $screen timed out"; cat "proof/snap-$screen.log"; return 1; fi
+  if kill -0 "$pid" 2>/dev/null; then kill "$pid"; echo "snapshot $screen timed out"; cat "proof/snap-$(basename "$out").log"; return 1; fi
   wait "$pid" || status=$?
-  cat "proof/snap-$screen.log"
+  cat "proof/snap-$(basename "$out").log"
   test "$status" -eq 0
   python3 -c 'import sys; d=open(sys.argv[1],"rb").read(); assert d[:8]==b"\x89PNG\r\n\x1a\n" and len(d)>2000' "$out"
   echo "snapshot $screen ok: $out"
 }
 
 if [ -f scripts/ci-snapshots.txt ]; then
-  while read -r screen file; do
-    [ -z "${screen:-}" ] && continue
-    case "$screen" in \#*) continue;; esac
-    snap "$screen" "$file"
+  while IFS= read -r line; do
+    case "$line" in ''|\#*) continue;; esac
+    eval "set -- $line"
+    snap "$@"
   done < scripts/ci-snapshots.txt
+  if command -v ffmpeg >/dev/null; then echo "ffmpeg available"; else echo "ffmpeg not on runner"; fi
 fi
 
 # App tests (Debug build; the Release app being packaged is untouched).
