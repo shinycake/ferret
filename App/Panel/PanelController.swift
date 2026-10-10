@@ -34,10 +34,10 @@ final class PanelController: NSObject, NSWindowDelegate, NSTextFieldDelegate, NS
     var keepOpenOnResign: (() -> Bool)?
     var onStateChange: ((SearchCoordinator.State) -> Void)?
 
-    init(backend: SearchBackend = DisconnectedBackend(), settings: SettingsStore = SettingsStore(), demo: Bool = false) {
+    init(backend: SearchBackend = DisconnectedBackend(), settings: SettingsStore? = nil, demo: Bool = false) {
         self.demo = demo
         window = SearchPanel()
-        coordinator = SearchCoordinator(backend: backend, settings: settings)
+        coordinator = SearchCoordinator(backend: backend, settings: settings ?? SettingsStore())
         if demo {
             let solid = NSView()
             solid.wantsLayer = true
