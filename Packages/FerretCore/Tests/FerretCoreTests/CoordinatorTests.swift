@@ -2,7 +2,7 @@ import Foundation
 import XCTest
 @testable import FerretCore
 
-actor RecordingBackend: SearchBackend {
+actor CoordinatorFakeBackend: SearchBackend {
     var requests: [FSearchClient.SearchRequest] = []
     var delay: Duration = .milliseconds(30)
     var failNext: FSearchError?
@@ -37,7 +37,7 @@ final class CoordinatorTests: XCTestCase {
     }
 
     func testRapidUpdatesSendAtMostTwiceAndLatestWins() async {
-        let backend = RecordingBackend()
+        let backend = CoordinatorFakeBackend()
         let c = SearchCoordinator(backend: backend, settings: settings())
         for text in ["a", "al", "alp", "alph", "alpha"] { c.update(text: text, scope: nil) }
         await waitFor(c) { if case .results(let s) = $0 { return s.query == "alpha" }; return false }
@@ -47,7 +47,7 @@ final class CoordinatorTests: XCTestCase {
     }
 
     func testContentQueriesAreDebounced() async throws {
-        let backend = RecordingBackend()
+        let backend = CoordinatorFakeBackend()
         let c = SearchCoordinator(backend: backend, settings: settings(), contentDebounce: .milliseconds(120))
         c.update(text: "grep:a", scope: nil)
         c.update(text: "grep:ab", scope: nil)
@@ -65,7 +65,7 @@ final class CoordinatorTests: XCTestCase {
     }
 
     func testErrorsKeepPreviousRows() async {
-        let backend = RecordingBackend()
+        let backend = CoordinatorFakeBackend()
         let c = SearchCoordinator(backend: backend, settings: settings())
         c.update(text: "size", scope: nil)
         await waitFor(c) { if case .results = $0 { return true }; return false }
@@ -78,7 +78,7 @@ final class CoordinatorTests: XCTestCase {
     }
 
     func testEmptyGrepPatternIsAHintAndNotSent() async {
-        let backend = RecordingBackend()
+        let backend = CoordinatorFakeBackend()
         let c = SearchCoordinator(backend: backend, settings: settings())
         c.update(text: "ext:rs grep:", scope: nil)
         XCTAssertEqual(c.state, .hint(SearchCoordinator.emptyPatternHint, keeping: nil))
@@ -94,7 +94,7 @@ final class CoordinatorTests: XCTestCase {
     }
 
     func testOverFetchWhenFiltersActive() async {
-        let backend = RecordingBackend()
+        let backend = CoordinatorFakeBackend()
         let store = settings()
         store.resultLimit = 20
         store.showHiddenFiles = false
